@@ -1,15 +1,13 @@
 export default function Waveform({ active }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 3, height: 40 }}>
-      {Array.from({ length: 24 }).map((_, i) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, height: 48 }}>
+      {Array.from({ length: 20 }).map((_, i) => (
         <div key={i} style={{
-          width: 3, borderRadius: 2,
-          background: active
-            ? `hsl(${250 + i * 3}, 80%, ${55 + Math.sin(i) * 10}%)`
-            : "var(--color-border-secondary)",
-          height: active ? `${14 + Math.sin(i * 0.8 + 1) * 12}px` : "6px",
-          animation: active ? `waveBar ${.5 + (i % 5) * .12}s ${i * .04}s ease-in-out infinite` : "none",
-          transition: "height .4s ease",
+          width: 5, borderRadius: 3,
+          background: active ? `hsl(${340 + i * 4}, 90%, 65%)` : "#ffffff22",
+          height: active ? `${16 + Math.sin(i * 0.9 + 1) * 14}px` : "5px",
+          animation: active ? `waveBar ${.45 + (i % 5) * .13}s ${i * .05}s ease-in-out infinite` : "none",
+          transition: "height .3s ease",
         }} />
       ))}
     </div>

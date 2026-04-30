@@ -1,10 +1,10 @@
 export default function Card({ children, style = {}, className = "" }) {
   return (
     <div className={className} style={{
-      background: "var(--color-background-primary)",
-      border: "0.5px solid var(--color-border-tertiary)",
-      borderRadius: "var(--border-radius-lg)",
-      padding: "1rem 1.25rem",
+      background: "#16213e",
+      border: "2px solid #ffffff0f",
+      borderRadius: 20,
+      padding: "1.2rem 1.4rem",
       ...style,
     }}>
       {children}

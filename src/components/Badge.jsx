@@ -1,8 +1,15 @@
-export default function Badge({ label, color = "#7c6dfa" }) {
+export default function Badge({ label, color = "#e94560" }) {
   return (
     <span style={{
-      display: "inline-block", padding: "2px 10px", borderRadius: 100,
-      background: color + "22", color, fontSize: 12, fontWeight: 500, letterSpacing: "0.2px",
+      display: "inline-block",
+      padding: "4px 12px",
+      borderRadius: 100,
+      background: color + "33",
+      color: color,
+      fontSize: 12,
+      fontWeight: 700,
+      border: `1.5px solid ${color}55`,
+      letterSpacing: "0.3px",
     }}>
       {label}
     </span>

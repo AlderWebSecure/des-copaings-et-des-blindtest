@@ -2,12 +2,15 @@ export default function GhostBtn({ children, onClick, style = {} }) {
   return (
     <button onClick={onClick} style={{
       background: "transparent",
-      color: "var(--color-text-secondary)",
-      border: "0.5px solid var(--color-border-secondary)",
-      borderRadius: "var(--border-radius-lg)",
-      padding: "11px 24px",
-      fontSize: 14,
-      fontWeight: 500,
+      color: "#ffffffaa",
+      border: "2px solid #ffffff22",
+      borderRadius: 14,
+      padding: "12px 24px",
+      fontSize: 15,
+      fontWeight: 700,
+      cursor: "pointer",
+      fontFamily: "'Nunito', sans-serif",
+      transition: "all .15s",
       ...style,
     }}>
       {children}

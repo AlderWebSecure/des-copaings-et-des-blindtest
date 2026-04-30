@@ -1,13 +1,13 @@
 export default function TimerRing({ seconds, total }) {
-  const r = 34, circ = 2 * Math.PI * r;
+  const r = 32, circ = 2 * Math.PI * r;
   const frac = seconds / total;
   const hue  = Math.round(frac * 120);
   return (
-    <div style={{ position: "relative", width: 80, height: 80 }}>
-      <svg width={80} height={80} style={{ transform: "rotate(-90deg)" }}>
-        <circle cx={40} cy={40} r={r} fill="none" stroke="var(--color-border-tertiary)" strokeWidth={6} />
-        <circle cx={40} cy={40} r={r} fill="none"
-          stroke={`hsl(${hue},75%,55%)`} strokeWidth={6}
+    <div style={{ position: "relative", width: 76, height: 76 }}>
+      <svg width={76} height={76} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={38} cy={38} r={r} fill="none" stroke="#ffffff15" strokeWidth={7} />
+        <circle cx={38} cy={38} r={r} fill="none"
+          stroke={`hsl(${hue}, 90%, 60%)`} strokeWidth={7}
           strokeDasharray={circ} strokeDashoffset={circ - frac * circ}
           strokeLinecap="round"
           style={{ transition: "stroke-dashoffset 1s linear, stroke 1s" }} />
@@ -15,8 +15,9 @@ export default function TimerRing({ seconds, total }) {
       <div style={{
         position: "absolute", inset: 0, display: "flex",
         alignItems: "center", justifyContent: "center",
-        fontWeight: 500, fontSize: 20,
-        color: seconds <= 5 ? "#ef4444" : "var(--color-text-primary)",
+        fontWeight: 900, fontSize: 22,
+        color: seconds <= 5 ? "#ff6b6b" : "#fff",
+        fontFamily: "'Nunito', sans-serif",
       }}>
         {seconds}
       </div>
