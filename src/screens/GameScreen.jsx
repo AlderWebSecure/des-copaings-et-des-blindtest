@@ -5,7 +5,7 @@ import Avatar    from "../components/Avatar";
 import Waveform  from "../components/Waveform";
 import TimerRing from "../components/TimerRing";
 import Steps     from "../components/Steps";
-import { PrimaryBtn } from "../components/PrimaryBtn";
+import { PrimaryBtn, GhostBtn } from "../components/PrimaryBtn";
 
 export default function GameScreen({ round, roundIndex, totalRounds, players, timerSec, onSubmit, onTimeout }) {
   const [timer,     setTimer]     = useState(timerSec);
