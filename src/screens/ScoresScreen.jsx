@@ -1,7 +1,8 @@
 import Card      from "../components/Card";
 import Avatar    from "../components/Avatar";
 import PlayerRow from "../components/PlayerRow";
-import { PrimaryBtn, GhostBtn } from "../components/PrimaryBtn";
+import PrimaryBtn from "../components/PrimaryBtn";
+import GhostBtn   from "../components/GhostBtn";
 
 export default function ScoresScreen({ players, totalRounds, onPlayAgain, onHome }) {
   const sorted = [...players].sort((a, b) => b.score - a.score);

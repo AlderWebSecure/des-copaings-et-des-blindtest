@@ -2,7 +2,8 @@ import Card      from "../components/Card";
 import Badge     from "../components/Badge";
 import Avatar    from "../components/Avatar";
 import PlayerRow from "../components/PlayerRow";
-import { PrimaryBtn, GhostBtn } from "../components/PrimaryBtn";
+import PrimaryBtn from "../components/PrimaryBtn";
+import GhostBtn   from "../components/GhostBtn";
 
 export default function RevealScreen({ round, roundIndex, totalRounds, players, myAnswer, roundDeltas, onNext, onFinish }) {
   const isLast = roundIndex >= totalRounds - 1;

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Card       from "../components/Card";
-import { PrimaryBtn, GhostBtn } from "../components/PrimaryBtn";
+import PrimaryBtn from "../components/PrimaryBtn";
+import GhostBtn   from "../components/GhostBtn";
 
 export default function HomeScreen({ onCreate, onJoin }) {
   const [code, setCode] = useState("");
@@ -31,7 +32,8 @@ export default function HomeScreen({ onCreate, onJoin }) {
         </PrimaryBtn>
         <div style={{ display: "flex", gap: 8 }}>
           <input
-            value={code} onChange={e => setCode(e.target.value.toUpperCase())}
+            value={code}
+            onChange={e => setCode(e.target.value.toUpperCase())}
             placeholder="Code room — ex: KIWI-42"
             style={{ flex: 1 }}
             onKeyDown={e => e.key === "Enter" && code && onJoin(code)}

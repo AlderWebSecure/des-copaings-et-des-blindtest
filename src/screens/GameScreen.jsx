@@ -5,7 +5,7 @@ import Avatar    from "../components/Avatar";
 import Waveform  from "../components/Waveform";
 import TimerRing from "../components/TimerRing";
 import Steps     from "../components/Steps";
-import { PrimaryBtn } from "../components/PrimaryBtn";
+import PrimaryBtn from "../components/PrimaryBtn";
 
 export default function GameScreen({ round, roundIndex, totalRounds, players, timerSec, onSubmit, onTimeout }) {
   const [timer,     setTimer]     = useState(timerSec);
@@ -53,7 +53,9 @@ export default function GameScreen({ round, roundIndex, totalRounds, players, ti
       </div>
 
       <Card className="fade-d1" style={{ textAlign: "center", padding: "28px 20px", marginBottom: 12, borderColor: "#7c6dfa44", background: "#7c6dfa08" }}>
-        <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>En cours de lecture</div>
+        <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>
+          En cours de lecture
+        </div>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
           <Waveform active={playing && !submitted} />
         </div>
@@ -81,11 +83,16 @@ export default function GameScreen({ round, roundIndex, totalRounds, players, ti
         <div style={{ fontSize: 12, color: "var(--color-text-tertiary)", marginBottom: 8 }}>Ta réponse :</div>
         <div style={{ display: "flex", gap: 8 }}>
           <input
-            value={answer} onChange={e => setAnswer(e.target.value)}
+            value={answer}
+            onChange={e => setAnswer(e.target.value)}
             onKeyDown={e => e.key === "Enter" && submit()}
             placeholder="Artiste et/ou titre du morceau…"
             disabled={submitted}
-            style={{ flex: 1, borderColor: submitted ? "#34d399" : undefined, background: submitted ? "#34d39911" : undefined }}
+            style={{
+              flex: 1,
+              borderColor: submitted ? "#34d399" : undefined,
+              background: submitted ? "#34d39911" : undefined,
+            }}
           />
           <PrimaryBtn onClick={submit} disabled={submitted || !answer.trim()} style={{ flexShrink: 0, padding: "10px 18px" }}>
             {submitted ? "✓" : "OK"}

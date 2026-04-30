@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { PrimaryBtn, GhostBtn } from "../components/PrimaryBtn";
+import PrimaryBtn from "../components/PrimaryBtn";
+import GhostBtn   from "../components/GhostBtn";
 
 export default function JoinScreen({ code: initCode, onBack, onJoin }) {
   const [name, setName] = useState("");

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Card            from "../components/Card";
-import { PrimaryBtn, GhostBtn } from "../components/PrimaryBtn";
+import PrimaryBtn from "../components/PrimaryBtn";
+import GhostBtn   from "../components/GhostBtn";
 import { GENRES, DECADES }      from "../constants/genres";
 
 export default function CreateScreen({ onBack, onCreate }) {
