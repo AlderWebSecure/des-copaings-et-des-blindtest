@@ -1,6 +1,7 @@
 // src/utils/pickDeezerTracks.js
-// Source de vérité : la whitelist ARTISTS_DB
-// On pioche les artistes correspondant aux genres/décennies, puis leurs top tracks Deezer
+// Pour chaque artiste de la whitelist :
+//   - on demande à Deezer ses tracks SORTIES dans la plage d'années demandée
+//   - donc AC/DC + 70s → uniquement albums Highway to Hell, Back in Black etc.
 
 import { ARTISTS_DB } from "../constants/artistsDB";
 import { DECADE_RANGES } from "../constants/deezerGenres";
@@ -34,16 +35,14 @@ function decadeFromYear(year) {
 // Construit la liste d'artistes à interroger selon les filtres
 function selectArtists(genres, decades) {
   const set = new Set();
-  const tagged = [];  // [{ artist, genre }]
+  const tagged = [];
 
   for (const genre of genres) {
     const genreDB = ARTISTS_DB[genre];
     if (!genreDB) continue;
-
     for (const decade of decades) {
       const list = genreDB[decade];
       if (!list) continue;
-
       for (const a of list) {
         if (!set.has(a)) {
           set.add(a);
@@ -52,17 +51,24 @@ function selectArtists(genres, decades) {
       }
     }
   }
-
   return tagged;
 }
 
-// Récupère les top tracks d'un artiste via /api/deezer?artist=...
-async function fetchArtistTracks(artistName, genreName) {
+// Récupère les tracks d'un artiste DANS la plage d'années
+async function fetchArtistTracksInRange(artistName, genreName, yearMin, yearMax) {
   try {
-    const r = await fetch(`/api/deezer?artist=${encodeURIComponent(artistName)}&limit=8`);
+    const params = new URLSearchParams({
+      artist: artistName,
+      limit:  "8",
+    });
+    if (yearMin) params.set("year_min", yearMin);
+    if (yearMax) params.set("year_max", yearMax);
+
+    const r = await fetch(`/api/deezer?${params}`);
     if (!r.ok) return [];
     const data = await r.json();
     if (!data.tracks) return [];
+
     return data.tracks
       .filter(t => t.preview)
       .map(t => ({ ...t, _genre: genreName }));
@@ -72,6 +78,7 @@ async function fetchArtistTracks(artistName, genreName) {
 }
 
 export async function pickDeezerTracks(genres, decades, count) {
+  // Calcule la plage d'années couvrant les décennies sélectionnées
   const ranges  = decades.map(d => DECADE_RANGES[d]).filter(Boolean);
   const yearMin = ranges.length ? Math.min(...ranges.map(r => r[0])) : null;
   const yearMax = ranges.length ? Math.max(...ranges.map(r => r[1])) : null;
@@ -86,34 +93,26 @@ export async function pickDeezerTracks(genres, decades, count) {
   // Mélange et limite à 20 artistes pour ne pas surcharger
   const sample = shuffle(taggedArtists).slice(0, 20);
 
-  // Récupère leurs top tracks en parallèle
+  // Récupère leurs tracks DANS la plage d'années en parallèle
   const trackArrays = await Promise.all(
-    sample.map(({ artist, genre }) => fetchArtistTracks(artist, genre))
+    sample.map(({ artist, genre }) =>
+      fetchArtistTracksInRange(artist, genre, yearMin, yearMax)
+    )
   );
 
   let allTracks = trackArrays.flat();
 
-  // Déduplique par ID
+  // Déduplique
   const seen = new Set();
   allTracks = allTracks.filter(t => {
-    if (seen.has(t.id)) return false;
-    seen.add(t.id);
+    const key = `${t.artist}-${t.title}`.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 
-  // Filtre par années si possible (la plupart des tracks Deezer ont une année)
-  if (yearMin && yearMax) {
-    const filtered = allTracks.filter(t => {
-      if (!t.year) return true;  // garde si année inconnue
-      return t.year >= yearMin && t.year <= yearMax;
-    });
-    if (filtered.length >= Math.min(count, 5)) {
-      allTracks = filtered;
-    }
-  }
-
   if (allTracks.length === 0) {
-    throw new Error("Aucun titre disponible. Essaie d'autres filtres.");
+    throw new Error("Aucun titre trouvé dans cette période. Essaie d'autres décennies ou genres.");
   }
 
   // Mélange et complète si pas assez

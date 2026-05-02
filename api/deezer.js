@@ -1,16 +1,15 @@
 // api/deezer.js
 // Modes :
 //   - ?suggest=mich         → autocomplétion
-//   - ?q=eminem             → 1 piste
-//   - ?artist=BTS           → top tracks d'un artiste précis (par recherche nom)
-//   - ?genre=132            → fallback chart Deezer (pas utilisé désormais)
+//   - ?q=eminem             → 1 piste (recherche libre)
+//   - ?artist=AC/DC&year_min=1970&year_max=1979 → tracks de l'artiste DANS la plage d'années
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  const { q, genre, artist, limit = 10, suggest } = req.query;
+  const { q, artist, year_min, year_max, limit = 8, suggest } = req.query;
 
   try {
     // ─── SUGGESTIONS ───────────────────────────────────
@@ -49,37 +48,92 @@ export default async function handler(req, res) {
       return res.status(200).json(formatTrack({ ...tracks[0], ...detailed }));
     }
 
-    // ─── TOP TRACKS D'UN ARTISTE PAR NOM ───────────────
+    // ─── ARTISTE + DÉCENNIE ───────────────────────────
     if (artist) {
-      // 1. Cherche l'artiste par nom
+      // 1. Trouve l'artiste exact par nom
       const searchUrl  = `https://api.deezer.com/search/artist?q=${encodeURIComponent(artist)}&limit=1&output=json`;
       const searchRes  = await fetch(searchUrl);
       const searchData = await searchRes.json();
       const found      = searchData.data?.[0];
-
       if (!found) return res.status(404).json({ error: `Artiste "${artist}" non trouvé` });
 
-      // 2. Récupère ses top tracks
-      const topUrl  = `https://api.deezer.com/artist/${found.id}/top?limit=${limit}&output=json`;
-      const topRes  = await fetch(topUrl);
-      const topData = await topRes.json();
-      const tracks  = (topData.data || [])
-        .filter(t => t.preview)
-        .map(t => ({ ...t, _artistName: found.name }));
+      // Sans filtre années → fallback top tracks classique
+      if (!year_min && !year_max) {
+        const topRes  = await fetch(`https://api.deezer.com/artist/${found.id}/top?limit=${limit}&output=json`);
+        const topData = await topRes.json();
+        const tracks  = (topData.data || [])
+          .filter(t => t.preview)
+          .map(t => ({ ...t, _artistName: found.name }));
+        return res.status(200).json({ tracks: tracks.map(formatTrack) });
+      }
 
-      return res.status(200).json({ tracks: tracks.map(formatTrack) });
+      // Avec filtre années → on récupère TOUS les albums de l'artiste
+      const albumsRes  = await fetch(`https://api.deezer.com/artist/${found.id}/albums?limit=100&output=json`);
+      const albumsData = await albumsRes.json();
+      const allAlbums  = albumsData.data || [];
+
+      // Filtre les albums dont release_date est dans la plage demandée
+      const albumsInRange = allAlbums.filter(alb => {
+        if (!alb.release_date) return false;
+        const y = parseInt(alb.release_date.slice(0, 4));
+        if (year_min && y < +year_min) return false;
+        if (year_max && y > +year_max) return false;
+        return true;
+      });
+
+      if (albumsInRange.length === 0) {
+        return res.status(200).json({ tracks: [] });
+      }
+
+      // Récupère les tracks de chaque album (en parallèle, max 8 albums)
+      const sampleAlbums = albumsInRange.slice(0, 8);
+      const trackArrays  = await Promise.all(
+        sampleAlbums.map(async (alb) => {
+          try {
+            const r = await fetch(`https://api.deezer.com/album/${alb.id}/tracks?limit=20&output=json`);
+            const d = await r.json();
+            return (d.data || [])
+              .filter(t => t.preview)
+              .map(t => ({
+                ...t,
+                _artistName:  found.name,
+                _albumYear:   parseInt(alb.release_date.slice(0, 4)),
+                _albumTitle:  alb.title,
+                _cover:       alb.cover_medium,
+              }));
+          } catch {
+            return [];
+          }
+        })
+      );
+
+      let tracks = trackArrays.flat();
+
+      // Déduplique par titre (un même morceau peut être sur plusieurs albums)
+      const seen = new Set();
+      tracks = tracks.filter(t => {
+        const key = t.title.toLowerCase().trim();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      // Limite et retourne
+      tracks = tracks.slice(0, +limit);
+      return res.status(200).json({
+        tracks: tracks.map(t => ({
+          id:      t.id,
+          title:   t.title,
+          artist:  found.name,
+          preview: t.preview,
+          cover:   t._cover || "",
+          album:   t._albumTitle || "",
+          year:    t._albumYear || null,
+        })),
+      });
     }
 
-    // ─── FALLBACK : chart par genre Deezer ─────────────
-    if (genre) {
-      const url    = `https://api.deezer.com/chart/${genre}/tracks?limit=${limit}&output=json`;
-      const r      = await fetch(url);
-      const data   = await r.json();
-      const tracks = (data.data || []).filter(t => t.preview);
-      return res.status(200).json({ tracks: tracks.map(formatTrack) });
-    }
-
-    return res.status(400).json({ error: "Paramètre q, artist, genre ou suggest requis" });
+    return res.status(400).json({ error: "Paramètre q, artist ou suggest requis" });
 
   } catch (err) {
     console.error("Deezer proxy error:", err);
