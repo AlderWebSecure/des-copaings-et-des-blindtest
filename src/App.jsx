@@ -14,6 +14,7 @@ import { useDeezer  } from "./hooks/useDeezer";
 import { useSpotify } from "./hooks/useSpotify";
 import { useRoom    } from "./hooks/useRoom";
 import { usePlayer  } from "./hooks/usePlayer";
+import { useTheme   } from "./hooks/useTheme";
 import { generatePlayerId, generatePlayerColor } from "./utils/roomCode";
 
 export default function App() {
@@ -137,6 +138,8 @@ export default function App() {
     return <HomeScreen
       onCreate={() => setScreen("source")}
       onJoin={(c) => { setPendingJoinCode(c || ""); setScreen("join"); }}
+      theme={theme}
+      onThemeChange={setTheme}
     />;
 
   if (screen === "source")
@@ -164,7 +167,7 @@ export default function App() {
       error={error}
     />;
 
-  if (!room) return <HomeScreen onCreate={() => setScreen("source")} onJoin={(c) => { setPendingJoinCode(c || ""); setScreen("join"); }} />;
+  if (!room) return <HomeScreen onCreate={() => setScreen("source")} onJoin={(c) => { setPendingJoinCode(c || ""); setScreen("join"); }} theme={theme} onThemeChange={setTheme} />;
 
   // À partir d'ici, on a une vraie room synchronisée
   const players       = room.players ? Object.entries(room.players).map(([id, p]) => ({ id, ...p })) : [];

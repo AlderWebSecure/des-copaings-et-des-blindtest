@@ -1,13 +1,30 @@
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
 
+/* ── DEFAULT THEME (rétro) — sera surchargé par useTheme ── */
+:root {
+  --bg:        #1a1a2e;
+  --bg-grad:   linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+  --card:      #16213e;
+  --card-2:    #0f3460;
+  --primary:   #e94560;
+  --secondary: #ffd93d;
+  --success:   #6bcb77;
+  --info:      #4d96ff;
+  --text:      #ffffff;
+  --text-2:    #ffffffaa;
+  --text-3:    #ffffff55;
+  --border:    #ffffff15;
+}
+
 /* RESET */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { min-height: 100%; }
 body {
-  background: #1a1a2e;
+  background: var(--bg-grad);
   font-family: 'Nunito', system-ui, sans-serif;
-  color: #ffffff;
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
+  transition: background 0.4s ease;
 }
 
 /* ANIMATIONS */
@@ -18,6 +35,7 @@ body {
 @keyframes float    { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 @keyframes spin     { to { transform: rotate(360deg); } }
 @keyframes shake    { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@keyframes shine    { from { background-position: -200% 0; } to { background-position: 200% 0; } }
 
 .fade,  .fu  { animation: fadeIn .4s ease both; }
 .fade-d1, .fu1 { animation: fadeIn .4s .08s ease both; opacity: 0; }
@@ -28,9 +46,9 @@ body {
 /* INPUTS */
 input, textarea {
   font-family: inherit;
-  color: #ffffff;
-  background: #0f3460;
-  border: 2px solid #ffffff22;
+  color: var(--text);
+  background: var(--card-2);
+  border: 2px solid var(--border);
   border-radius: 12px;
   padding: 11px 14px;
   font-size: 14px;
@@ -40,10 +58,10 @@ input, textarea {
   transition: border-color .15s, background .15s;
 }
 input:focus, textarea:focus {
-  border-color: #e94560;
-  background: #16213e;
+  border-color: var(--primary);
+  background: var(--card);
 }
-input::placeholder { color: #ffffff44; font-weight: 500; }
+input::placeholder { color: var(--text-3); font-weight: 500; }
 
 /* BUTTONS */
 button {
@@ -58,8 +76,8 @@ button:disabled { cursor: not-allowed; }
 /* SCROLLBAR */
 ::-webkit-scrollbar          { width: 6px; }
 ::-webkit-scrollbar-track    { background: transparent; }
-::-webkit-scrollbar-thumb    { background: #ffffff22; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #ffffff44; }
+::-webkit-scrollbar-thumb    { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 
 /* RANGE SLIDERS */
 input[type="range"] {
@@ -72,12 +90,12 @@ input[type="range"] {
 }
 input[type="range"]::-webkit-slider-runnable-track {
   height: 6px;
-  background: #ffffff15;
+  background: var(--border);
   border-radius: 3px;
 }
 input[type="range"]::-moz-range-track {
   height: 6px;
-  background: #ffffff15;
+  background: var(--border);
   border-radius: 3px;
   border: none;
 }
@@ -87,9 +105,8 @@ input[type="range"]::-webkit-slider-thumb {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #e94560;
+  background: var(--primary);
   margin-top: -7px;
-  box-shadow: 0 3px 0 #e9456066;
   cursor: pointer;
   border: none;
 }
@@ -97,8 +114,7 @@ input[type="range"]::-moz-range-thumb {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #e94560;
-  box-shadow: 0 3px 0 #e9456066;
+  background: var(--primary);
   cursor: pointer;
   border: none;
 }

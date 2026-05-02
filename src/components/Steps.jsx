@@ -4,7 +4,7 @@ export default function Steps({ current, total }) {
       {Array.from({ length: total }).map((_, i) => (
         <div key={i} style={{
           height: 5, flex: 1, borderRadius: 3,
-          background: i < current ? "#e94560" : i === current ? "#e9456088" : "#ffffff15",
+          background: i < current ? "var(--primary)" : i === current ? "var(--primary)" + "88" : "var(--border)",
           transition: "background .3s",
         }} />
       ))}
