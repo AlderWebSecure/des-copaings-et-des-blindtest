@@ -1,136 +1,142 @@
 // src/hooks/useDeezer.js
-// Lecture extraits Deezer 30s avec gestion robuste des erreurs
+// Une SEULE instance Audio partagée — évite tout overlap
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 
 export function useDeezer() {
   const audioRef    = useRef(null);
   const playPromise = useRef(null);
+  const tokenRef    = useRef(0);    // anti race condition
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState(null);
   const [track,   setTrack]   = useState(null);
 
-  const safeStop = async () => {
-    if (audioRef.current) {
-      try {
-        if (playPromise.current) {
-          await playPromise.current.catch(() => {});
-        }
-        audioRef.current.pause();
-        audioRef.current.src = "";
-        audioRef.current.load();
-      } catch {}
+  // Crée une instance unique au mount
+  useEffect(() => {
+    const audio = new Audio();
+    audio.crossOrigin = "anonymous";
+    audio.volume = 0.8;
+    audio.preload = "auto";
+
+    audio.addEventListener("ended",  () => setPlaying(false));
+    audio.addEventListener("pause",  () => setPlaying(false));
+    audio.addEventListener("play",   () => setPlaying(true));
+    audio.addEventListener("error",  () => setError("Erreur de lecture"));
+
+    audioRef.current = audio;
+
+    return () => {
+      audio.pause();
+      audio.src = "";
+      audio.load();
       audioRef.current = null;
+    };
+  }, []);
+
+  // Coupe net : pause + reset src
+  const safeStop = useCallback(async () => {
+    const a = audioRef.current;
+    if (!a) return;
+    try {
+      if (playPromise.current) await playPromise.current.catch(() => {});
+    } catch {}
+    a.pause();
+    a.removeAttribute("src");
+    a.load();          // force le navigateur à libérer le buffer
+    setPlaying(false);
+    playPromise.current = null;
+  }, []);
+
+  // Joue une nouvelle URL (réutilise l'audio existant)
+  const playUrl = async (url, trackData, token) => {
+    const a = audioRef.current;
+    if (!a) return;
+
+    // Si entre-temps un autre play a été lancé, on abandonne
+    if (token !== tokenRef.current) return;
+
+    a.pause();
+    a.src = url;
+    a.load();
+
+    if (token !== tokenRef.current) return;
+
+    setTrack(trackData);
+    try {
+      playPromise.current = a.play();
+      await playPromise.current;
       playPromise.current = null;
+    } catch (err) {
+      if (err.name === "AbortError") return;
+      throw err;
     }
   };
 
-  // Joue une URL audio en gérant les erreurs
-  const playUrl = async (url, trackData) => {
-    await safeStop();
-
-    return new Promise((resolve, reject) => {
-      const audio = new Audio();
-      audio.crossOrigin = "anonymous";  // important pour Deezer
-      audio.volume = 0.8;
-      audio.preload = "auto";
-
-      const cleanup = () => {
-        audio.onerror = null;
-        audio.oncanplay = null;
-      };
-
-      audio.onerror = (e) => {
-        cleanup();
-        reject(new Error("Audio error: " + (audio.error?.message || "unknown")));
-      };
-
-      audio.oncanplay = async () => {
-        cleanup();
-        audioRef.current = audio;
-        setTrack(trackData);
-
-        audio.onended = () => setPlaying(false);
-        audio.onpause = () => setPlaying(false);
-        audio.onplay  = () => setPlaying(true);
-
-        try {
-          playPromise.current = audio.play();
-          await playPromise.current;
-          playPromise.current = null;
-          setPlaying(true);
-          resolve();
-        } catch (err) {
-          if (err.name === "AbortError") return resolve();
-          reject(err);
-        }
-      };
-
-      audio.src = url;
-      audio.load();
-    });
-  };
-
-  // Joue une track depuis ses données pré-chargées
   const playTrack = useCallback(async (trackData) => {
+    const myToken = ++tokenRef.current;
     setLoading(true); setError(null);
+
     try {
       if (!trackData?.preview) throw new Error("Pas d'extrait disponible");
-
+      await safeStop();
+      if (myToken !== tokenRef.current) return;
+      await playUrl(trackData.preview, trackData, myToken);
+    } catch (err) {
+      if (err.name === "AbortError") return;
+      // Fallback : recherche fraîche si l'URL preview est expirée
       try {
-        await playUrl(trackData.preview, trackData);
-      } catch (err) {
-        // Fallback : retente une recherche fraîche si l'URL preview a expiré
-        console.warn("Preview URL failed, retrying search:", err);
         const r = await fetch(`/api/deezer?q=${encodeURIComponent(trackData.artist + " " + trackData.title)}`);
         const fresh = await r.json();
-        if (fresh.error || !fresh.preview) throw new Error("Extrait indisponible");
-        await playUrl(fresh.preview, { ...trackData, preview: fresh.preview });
-      }
-    } catch (err) {
-      if (err.name !== "AbortError") {
-        setError(err.message || "Erreur Deezer");
-        console.error("Deezer playback error:", err);
-      }
+        if (fresh.preview && myToken === tokenRef.current) {
+          await playUrl(fresh.preview, { ...trackData, preview: fresh.preview }, myToken);
+          return;
+        }
+      } catch {}
+      setError("Extrait indisponible — clique ▶ pour relancer");
+      console.error("Deezer playback error:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [safeStop]);
 
-  // Recherche libre + lecture
   const play = useCallback(async (query) => {
+    const myToken = ++tokenRef.current;
     setLoading(true); setError(null);
     try {
       const r = await fetch(`/api/deezer?q=${encodeURIComponent(query)}`);
       const data = await r.json();
       if (data.error) throw new Error(data.error);
-      await playTrack(data);
+      if (myToken !== tokenRef.current) return;
+      await safeStop();
+      await playUrl(data.preview, data, myToken);
     } catch (err) {
       if (err.name !== "AbortError") setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [playTrack]);
+  }, [safeStop]);
 
   const pause = useCallback(async () => {
-    if (!audioRef.current) return;
+    const a = audioRef.current;
+    if (!a) return;
     if (playPromise.current) await playPromise.current.catch(() => {});
-    audioRef.current.pause();
+    a.pause();
   }, []);
 
   const resume = useCallback(() => {
-    if (!audioRef.current) return;
-    playPromise.current = audioRef.current.play();
+    const a = audioRef.current;
+    if (!a || !a.src) return;
+    playPromise.current = a.play();
     playPromise.current.catch(() => {});
   }, []);
 
   const stop = useCallback(async () => {
+    tokenRef.current++;     // invalide tout play en cours
     await safeStop();
-    setPlaying(false);
     setTrack(null);
     setError(null);
-  }, []);
+  }, [safeStop]);
 
   const setVolume = useCallback((v) => {
     if (audioRef.current) audioRef.current.volume = Math.max(0, Math.min(1, v));

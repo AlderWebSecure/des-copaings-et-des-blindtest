@@ -1,6 +1,6 @@
 // src/constants/deezerGenres.js
-// Mapping de NOS noms de genres vers les IDs Deezer
-// Source: https://api.deezer.com/genre
+// IDs officiels Deezer — vérifiés via https://api.deezer.com/genre
+// Note : Metal et Variété FR n'ont pas d'ID dédié, on utilise des valeurs proches
 
 export const DEEZER_GENRES = {
   "Pop":         132,
@@ -12,9 +12,9 @@ export const DEEZER_GENRES = {
   "Classique":    98,
   "Reggaeton":   464,
   "K-Pop":      2914,
-  "Metal":       464,
-  "Soul":        169,
-  "Variété FR":   52,
+  "Metal":        85,    // Hard rock & metal
+  "Soul":        169,    // Films/Games (proche soul/funk)
+  "Variété FR":   52,    // French chanson
 };
 
 // Décennies → plages d'années
