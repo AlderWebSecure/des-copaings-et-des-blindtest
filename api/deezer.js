@@ -1,6 +1,6 @@
 // api/deezer.js
-// Source de vérité : on récupère les artistes du genre, puis on
-// VALIDE leur appartenance via l'endpoint artist (qui contient ses genres réels)
+// Validation stricte : on regarde le genre majoritaire des albums de l'artiste
+// Si la majorité ne matche pas le genre demandé, on rejette.
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -46,40 +46,46 @@ export default async function handler(req, res) {
       return res.status(200).json(formatTrack({ ...tracks[0], ...detailed }));
     }
 
-    // ─── PIOCHE PAR GENRE (avec validation stricte) ───
+    // ─── PIOCHE PAR GENRE ──────────────────────────────
     if (genre) {
       const genreId = +genre;
 
-      // 1. Récupère les artistes proposés par Deezer pour ce genre
-      const artistsUrl  = `https://api.deezer.com/genre/${genreId}/artists?output=json`;
-      const artistsRes  = await fetch(artistsUrl);
+      // 1. Artistes proposés par Deezer pour ce genre
+      const artistsRes  = await fetch(`https://api.deezer.com/genre/${genreId}/artists?output=json`);
       const artistsData = await artistsRes.json();
-      const candidateArtists = (artistsData.data || []).slice(0, 25);
+      const candidates  = (artistsData.data || []).slice(0, 25);
 
-      if (candidateArtists.length === 0) {
+      if (candidates.length === 0) {
         return res.status(404).json({ error: "Genre non trouvé" });
       }
 
-      // 2. Valide chaque artiste : récupère ses vrais genres
-      // Deezer expose /artist/{id} mais pas les genres directement
-      // Par contre /artist/{id}/albums donne les genres de chaque album
-      // On utilise une heuristique : on regarde le 1er album et son genre_id
-      const validatedArtists = await Promise.all(
-        candidateArtists.map(async (a) => {
+      // 2. Validation par genre majoritaire des 5 derniers albums
+      const validated = await Promise.all(
+        candidates.map(async (a) => {
           try {
-            const albumsRes = await fetch(`https://api.deezer.com/artist/${a.id}/albums?limit=3&output=json`);
+            const albumsRes = await fetch(`https://api.deezer.com/artist/${a.id}/albums?limit=5&output=json`);
             const albumsData = await albumsRes.json();
-            const albums = albumsData.data || [];
+            const albums = (albumsData.data || []).slice(0, 5);
             if (albums.length === 0) return null;
 
-            // Récupère le genre de l'album le plus connu
-            const detailRes = await fetch(`https://api.deezer.com/album/${albums[0].id}?output=json`);
-            const detail   = await detailRes.json();
-            const albumGenreId = detail.genre_id || detail.genres?.data?.[0]?.id;
+            // Récupère le genre_id de chaque album en parallèle
+            const albumGenres = await Promise.all(
+              albums.map(async (alb) => {
+                try {
+                  const r = await fetch(`https://api.deezer.com/album/${alb.id}?output=json`);
+                  const d = await r.json();
+                  return d.genre_id ?? d.genres?.data?.[0]?.id ?? null;
+                } catch { return null; }
+              })
+            );
 
-            // L'artiste est valide si l'ID genre matche
-            if (albumGenreId === genreId) {
-              return a;
+            // Compte combien d'albums correspondent au genre demandé
+            const matches = albumGenres.filter(g => g === genreId).length;
+            const total   = albumGenres.filter(g => g !== null).length;
+
+            // L'artiste est valide si AU MOINS 50% de ses albums sont du genre
+            if (total > 0 && matches / total >= 0.5) {
+              return { ...a, _matchRatio: matches / total };
             }
             return null;
           } catch {
@@ -88,12 +94,15 @@ export default async function handler(req, res) {
         })
       );
 
-      const validArtists = validatedArtists.filter(Boolean);
+      const validArtists = validated.filter(Boolean);
 
-      // Si validation trop stricte (rien), on garde les premiers de la liste Deezer
-      const finalArtists = validArtists.length >= 5 ? validArtists : candidateArtists.slice(0, 15);
+      // Si trop peu d'artistes validés, on prend les premiers de la liste sans validation
+      // (mieux que rien, surtout pour les genres de niche)
+      const finalArtists = validArtists.length >= 3
+        ? validArtists
+        : candidates.slice(0, 10);
 
-      // 3. Pour chaque artiste validé, récupère ses top tracks
+      // 3. Top tracks pour chaque artiste validé
       const trackArrays = await Promise.all(
         finalArtists.map(async (a) => {
           try {
@@ -110,7 +119,7 @@ export default async function handler(req, res) {
 
       let allTracks = trackArrays.flat();
 
-      // Déduplique par ID
+      // Déduplique
       const seen = new Set();
       allTracks = allTracks.filter(t => {
         if (seen.has(t.id)) return false;
@@ -122,7 +131,7 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: "Aucune piste trouvée" });
       }
 
-      // 4. Si filtre années, on récupère les détails et filtre strict
+      // 4. Filtre par années si demandé
       if (year_min || year_max) {
         const sample = allTracks.slice(0, 60);
         const detailed = await Promise.all(
@@ -142,7 +151,6 @@ export default async function handler(req, res) {
         if (filtered.length > 0) {
           return res.status(200).json({ tracks: filtered.map(formatTrack) });
         }
-        // Sinon renvoie tout sans filtre années (au moins le genre est bon)
         return res.status(200).json({ tracks: detailed.map(formatTrack) });
       }
 
@@ -159,7 +167,7 @@ export default async function handler(req, res) {
 
 async function fetchTrackDetail(trackId) {
   try {
-    const r    = await fetch(`https://api.deezer.com/track/${trackId}?output=json`);
+    const r = await fetch(`https://api.deezer.com/track/${trackId}?output=json`);
     const data = await r.json();
     return {
       year:         data.release_date ? parseInt(data.release_date.slice(0, 4)) : null,
