@@ -79,7 +79,7 @@ export default async function handler(req, res) {
     }
 
     return res.status(400).json({ error: "Paramètre q, genre ou suggest requis" });
-
+ 
   } catch (err) {
     console.error("Deezer proxy error:", err);
     return res.status(500).json({ error: "Erreur proxy Deezer" });
