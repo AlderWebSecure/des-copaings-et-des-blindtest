@@ -18,12 +18,10 @@ import { useTheme   } from "./hooks/useTheme";
 import { generatePlayerId, generatePlayerColor } from "./utils/roomCode";
 
 export default function App() {
-  // ─── Routing local ───────────────────────────────────────────
   const [screen,         setScreen]          = useState("home");
   const [pendingSource,  setPendingSource]   = useState(null);
   const [pendingJoinCode,setPendingJoinCode] = useState("");
 
-  // ─── Hooks ───────────────────────────────────────────────────
   const { player, setPlayer, clearPlayer } = usePlayer();
   const { theme, setTheme }                = useTheme();
   const { room, code, error, loading,
@@ -36,7 +34,7 @@ export default function App() {
   const music   = source === "spotify" ? spotify : deezer;
   const isHost  = player && room?.meta?.hostId === player.id;
 
-  // ─── Sync screen avec l'état de la room ──────────────────────
+  // Sync screen avec status de room
   useEffect(() => {
     if (!room) return;
     if (room.meta.status === "lobby")    setScreen("lobby");
@@ -45,19 +43,31 @@ export default function App() {
     if (room.meta.status === "finished") setScreen("scores");
   }, [room?.meta?.status]);
 
-  // ─── Lecture audio quand un nouveau round commence (host only) ──
+  // Coupe la musique dès qu'on quitte l'état "playing"
+  useEffect(() => {
+    if (!room) return;
+    if (room.meta.status !== "playing") {
+      music.stop();
+    }
+  }, [room?.meta?.status]);
+
+  // Lecture du round (host uniquement)
   useEffect(() => {
     if (!isHost || !room || room.meta.status !== "playing") return;
     const track = room.tracks[room.current.roundIndex];
     if (!track) return;
-    if (source === "deezer" && track.preview) {
-      music.playTrack(track);
-    } else {
-      music.play(`${track.artist} ${track.title}`);
-    }
+    // Stop puis play pour éviter les overlaps
+    (async () => {
+      await music.stop();
+      if (source === "deezer" && track.preview) {
+        music.playTrack(track);
+      } else {
+        music.play(`${track.artist} ${track.title}`);
+      }
+    })();
   }, [room?.current?.roundIndex, room?.meta?.status, isHost]);
 
-  // ─── Callback Spotify OAuth ──────────────────────────────────
+  // Spotify OAuth callback
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const codeParam = params.get("code");
@@ -69,7 +79,6 @@ export default function App() {
     }
   }, []);
 
-  // ─── HANDLERS ────────────────────────────────────────────────
   const handleSelectSource = (src) => {
     setPendingSource(src);
     setScreen("create");
@@ -101,40 +110,43 @@ export default function App() {
   };
 
   const handleLeave = async () => {
-    music.stop();
+    await music.stop();
     if (player) await leaveRoom(player.id);
     clearPlayer();
     setScreen("home");
   };
 
+  // Validation de réponse → coupe la musique tout de suite
   const handleSubmitAnswer = async (answer, timeLeft) => {
     if (!player || !room) return;
+    await music.stop();
     await submitAnswer(player.id, answer, timeLeft, room.config.timerSec);
   };
 
   const handleRoundTimeout = async () => {
-    music.stop();
+    await music.stop();
     if (isHost) await revealRound();
   };
 
   const handleNext = async () => {
     if (!isHost) return;
-    music.stop();
+    await music.stop();
     await nextRound(room.current.roundIndex, room.config.rounds);
   };
 
   const handleReveal = async () => {
     if (!isHost) return;
-    music.stop();
+    await music.stop();
     await revealRound();
   };
 
   const handleRestart = async () => {
     if (!isHost) return;
+    await music.stop();
     await restartGame();
   };
 
-  // ─── ROUTER ──────────────────────────────────────────────────
+  // Routing
   if (screen === "home")
     return <HomeScreen
       onCreate={() => setScreen("source")}

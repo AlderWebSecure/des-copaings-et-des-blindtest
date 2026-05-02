@@ -129,6 +129,7 @@ export function useDeezer() {
     await safeStop();
     setPlaying(false);
     setTrack(null);
+    setError(null);
   }, []);
 
   const setVolume = useCallback((v) => {
