@@ -9,10 +9,25 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  const { q, artist, year_min, year_max, limit = 8, suggest } = req.query;
+  const { q, artist, artist_search, year_min, year_max, limit = 8, suggest } = req.query;
 
   try {
-    // ─── SUGGESTIONS ───────────────────────────────────
+    // ─── RECHERCHE D'ARTISTES (autocomplétion) ─────────
+    if (artist_search) {
+      if (artist_search.length < 2) return res.status(200).json({ artists: [] });
+      const url  = `https://api.deezer.com/search/artist?q=${encodeURIComponent(artist_search)}&limit=8&output=json`;
+      const r    = await fetch(url);
+      const data = await r.json();
+      const artists = (data.data || []).map(a => ({
+        id:      a.id,
+        name:    a.name,
+        picture: a.picture_medium,
+        nb_fan:  a.nb_fan || 0,
+      }));
+      return res.status(200).json({ artists });
+    }
+
+    // ─── SUGGESTIONS (autocomplete tracks) ─────────────
     if (suggest) {
       if (suggest.length < 2) return res.status(200).json({ suggestions: [] });
       const url  = `https://api.deezer.com/search?q=${encodeURIComponent(suggest)}&limit=${limit}&output=json`;
