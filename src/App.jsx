@@ -19,18 +19,17 @@ import { generatePlayerId, generatePlayerColor } from "./utils/roomCode";
 
 export default function App() {
   // ─── Routing local ───────────────────────────────────────────
-  const [screen,         setScreen]         = useState("home");   // local UI screen
-  const [pendingConfig,  setPendingConfig]  = useState(null);
-  const [pendingSource,  setPendingSource]  = useState(null);
-  const [pendingJoinCode,setPendingJoinCode]= useState("");
+  const [screen,         setScreen]          = useState("home");
+  const [pendingSource,  setPendingSource]   = useState(null);
+  const [pendingJoinCode,setPendingJoinCode] = useState("");
 
-  // ─── Identité joueur + room temps réel ───────────────────────
+  // ─── Hooks ───────────────────────────────────────────────────
   const { player, setPlayer, clearPlayer } = usePlayer();
+  const { theme, setTheme }                = useTheme();
   const { room, code, error, loading,
           createRoom, joinRoom, leaveRoom,
           startGame, nextRound, revealRound, submitAnswer, restartGame } = useRoom();
 
-  // ─── Sources musicales ───────────────────────────────────────
   const deezer  = useDeezer();
   const spotify = useSpotify();
   const source  = room?.meta?.source || pendingSource;
@@ -51,7 +50,11 @@ export default function App() {
     if (!isHost || !room || room.meta.status !== "playing") return;
     const track = room.tracks[room.current.roundIndex];
     if (!track) return;
-    music.play(`${track.artist} ${track.title}`);
+    if (source === "deezer" && track.preview) {
+      music.playTrack(track);
+    } else {
+      music.play(`${track.artist} ${track.title}`);
+    }
   }, [room?.current?.roundIndex, room?.meta?.status, isHost]);
 
   // ─── Callback Spotify OAuth ──────────────────────────────────
@@ -73,7 +76,6 @@ export default function App() {
   };
 
   const handleCreateRoom = async (config) => {
-    // crée le joueur host
     const hostPlayer = setPlayer({
       id:     player?.id || generatePlayerId(),
       name:   config.hostName,
@@ -88,12 +90,11 @@ export default function App() {
     const p = setPlayer({
       id:     player?.id || generatePlayerId(),
       name,
-      color:  "#888",     // sera réassigné par useRoom
+      color:  "#888",
       isHost: false,
     });
     const result = await joinRoom(roomCode, p);
     if (result) {
-      // met à jour la couleur attribuée
       setPlayer({ ...p, color: result.color });
       setScreen("lobby");
     }
@@ -167,11 +168,15 @@ export default function App() {
       error={error}
     />;
 
-  if (!room) return <HomeScreen onCreate={() => setScreen("source")} onJoin={(c) => { setPendingJoinCode(c || ""); setScreen("join"); }} theme={theme} onThemeChange={setTheme} />;
+  if (!room) return <HomeScreen
+    onCreate={() => setScreen("source")}
+    onJoin={(c) => { setPendingJoinCode(c || ""); setScreen("join"); }}
+    theme={theme}
+    onThemeChange={setTheme}
+  />;
 
-  // À partir d'ici, on a une vraie room synchronisée
   const players       = room.players ? Object.entries(room.players).map(([id, p]) => ({ id, ...p })) : [];
-  const sortedPlayers = [...players].sort((a,b) => b.score - a.score);
+  const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
   const totalRounds   = room.config.rounds;
   const currentIdx    = room.current.roundIndex;
   const currentTrack  = room.tracks[currentIdx];
