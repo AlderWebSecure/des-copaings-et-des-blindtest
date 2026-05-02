@@ -29,9 +29,13 @@ function decadeFromYear(year) {
   return "2020s";
 }
 
-async function fetchGenrePool(genreName, genreId, yearMin, yearMax) {
+async function fetchGenrePool(genreName, cfg, yearMin, yearMax) {
   try {
-    const params = new URLSearchParams({ genre: genreId, limit: "80" });
+    const params = new URLSearchParams({
+      genre: cfg.id,
+      limit: "80",
+      strict: cfg.strict ? "true" : "false",
+    });
     if (yearMin) params.set("year_min", yearMin);
     if (yearMax) params.set("year_max", yearMax);
 
@@ -58,7 +62,7 @@ export async function pickDeezerTracks(genres, decades, count) {
     genres.map(async (g) => {
       const cfg = DEEZER_GENRES[g];
       if (!cfg) return [];
-      return fetchGenrePool(g, cfg.id, yearMin, yearMax);
+      return fetchGenrePool(g, cfg, yearMin, yearMax);
     })
   );
 

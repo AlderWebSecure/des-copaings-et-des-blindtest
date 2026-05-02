@@ -49,6 +49,7 @@ export default async function handler(req, res) {
     // ─── PIOCHE PAR GENRE ──────────────────────────────
     if (genre) {
       const genreId = +genre;
+      const strict  = req.query.strict !== "false";  // par défaut on valide
 
       // 1. Artistes proposés par Deezer pour ce genre
       const artistsRes  = await fetch(`https://api.deezer.com/genre/${genreId}/artists?output=json`);
@@ -59,50 +60,51 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: "Genre non trouvé" });
       }
 
-      // 2. Validation par genre majoritaire des 5 derniers albums
-      const validated = await Promise.all(
-        candidates.map(async (a) => {
-          try {
-            const albumsRes = await fetch(`https://api.deezer.com/artist/${a.id}/albums?limit=5&output=json`);
-            const albumsData = await albumsRes.json();
-            const albums = (albumsData.data || []).slice(0, 5);
-            if (albums.length === 0) return null;
+      let finalArtists;
 
-            // Récupère le genre_id de chaque album en parallèle
-            const albumGenres = await Promise.all(
-              albums.map(async (alb) => {
-                try {
-                  const r = await fetch(`https://api.deezer.com/album/${alb.id}?output=json`);
-                  const d = await r.json();
-                  return d.genre_id ?? d.genres?.data?.[0]?.id ?? null;
-                } catch { return null; }
-              })
-            );
+      if (strict) {
+        // 2. Validation par genre majoritaire des 5 derniers albums
+        const validated = await Promise.all(
+          candidates.map(async (a) => {
+            try {
+              const albumsRes = await fetch(`https://api.deezer.com/artist/${a.id}/albums?limit=5&output=json`);
+              const albumsData = await albumsRes.json();
+              const albums = (albumsData.data || []).slice(0, 5);
+              if (albums.length === 0) return null;
 
-            // Compte combien d'albums correspondent au genre demandé
-            const matches = albumGenres.filter(g => g === genreId).length;
-            const total   = albumGenres.filter(g => g !== null).length;
+              const albumGenres = await Promise.all(
+                albums.map(async (alb) => {
+                  try {
+                    const r = await fetch(`https://api.deezer.com/album/${alb.id}?output=json`);
+                    const d = await r.json();
+                    return d.genre_id ?? d.genres?.data?.[0]?.id ?? null;
+                  } catch { return null; }
+                })
+              );
 
-            // L'artiste est valide si AU MOINS 50% de ses albums sont du genre
-            if (total > 0 && matches / total >= 0.5) {
-              return { ...a, _matchRatio: matches / total };
+              const matches = albumGenres.filter(g => g === genreId).length;
+              const total   = albumGenres.filter(g => g !== null).length;
+
+              if (total > 0 && matches / total >= 0.5) {
+                return { ...a, _matchRatio: matches / total };
+              }
+              return null;
+            } catch {
+              return null;
             }
-            return null;
-          } catch {
-            return null;
-          }
-        })
-      );
+          })
+        );
 
-      const validArtists = validated.filter(Boolean);
+        const validArtists = validated.filter(Boolean);
+        finalArtists = validArtists.length >= 3
+          ? validArtists
+          : candidates.slice(0, 15);  // fallback : sans validation
+      } else {
+        // Mode non-strict : on fait confiance à Deezer
+        finalArtists = candidates.slice(0, 20);
+      }
 
-      // Si trop peu d'artistes validés, on prend les premiers de la liste sans validation
-      // (mieux que rien, surtout pour les genres de niche)
-      const finalArtists = validArtists.length >= 3
-        ? validArtists
-        : candidates.slice(0, 10);
-
-      // 3. Top tracks pour chaque artiste validé
+      // 3. Top tracks pour chaque artiste
       const trackArrays = await Promise.all(
         finalArtists.map(async (a) => {
           try {
