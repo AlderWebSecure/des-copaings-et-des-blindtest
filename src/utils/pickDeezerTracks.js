@@ -1,7 +1,9 @@
 // src/utils/pickDeezerTracks.js
-// Pioche stricte par genre (validation côté API)
+// Source de vérité : la whitelist ARTISTS_DB
+// On pioche les artistes correspondant aux genres/décennies, puis leurs top tracks Deezer
 
-import { DEEZER_GENRES, DECADE_RANGES } from "../constants/deezerGenres";
+import { ARTISTS_DB } from "../constants/artistsDB";
+import { DECADE_RANGES } from "../constants/deezerGenres";
 
 const GENRE_EMOJI = {
   "Pop": "🎵", "Hip-Hop": "🎤", "Rock": "🎸", "R&B": "🎵",
@@ -29,26 +31,42 @@ function decadeFromYear(year) {
   return "2020s";
 }
 
-async function fetchGenrePool(genreName, cfg, yearMin, yearMax) {
-  try {
-    const params = new URLSearchParams({
-      genre: cfg.id,
-      limit: "80",
-      strict: cfg.strict ? "true" : "false",
-    });
-    if (yearMin) params.set("year_min", yearMin);
-    if (yearMax) params.set("year_max", yearMax);
+// Construit la liste d'artistes à interroger selon les filtres
+function selectArtists(genres, decades) {
+  const set = new Set();
+  const tagged = [];  // [{ artist, genre }]
 
-    const r = await fetch(`/api/deezer?${params}`);
+  for (const genre of genres) {
+    const genreDB = ARTISTS_DB[genre];
+    if (!genreDB) continue;
+
+    for (const decade of decades) {
+      const list = genreDB[decade];
+      if (!list) continue;
+
+      for (const a of list) {
+        if (!set.has(a)) {
+          set.add(a);
+          tagged.push({ artist: a, genre });
+        }
+      }
+    }
+  }
+
+  return tagged;
+}
+
+// Récupère les top tracks d'un artiste via /api/deezer?artist=...
+async function fetchArtistTracks(artistName, genreName) {
+  try {
+    const r = await fetch(`/api/deezer?artist=${encodeURIComponent(artistName)}&limit=8`);
     if (!r.ok) return [];
     const data = await r.json();
     if (!data.tracks) return [];
-
     return data.tracks
       .filter(t => t.preview)
       .map(t => ({ ...t, _genre: genreName }));
-  } catch (e) {
-    console.warn(`Pool ${genreName} failed:`, e);
+  } catch {
     return [];
   }
 }
@@ -58,17 +76,24 @@ export async function pickDeezerTracks(genres, decades, count) {
   const yearMin = ranges.length ? Math.min(...ranges.map(r => r[0])) : null;
   const yearMax = ranges.length ? Math.max(...ranges.map(r => r[1])) : null;
 
-  const pools = await Promise.all(
-    genres.map(async (g) => {
-      const cfg = DEEZER_GENRES[g];
-      if (!cfg) return [];
-      return fetchGenrePool(g, cfg, yearMin, yearMax);
-    })
+  // Sélectionne les artistes pertinents depuis la whitelist
+  const taggedArtists = selectArtists(genres, decades);
+
+  if (taggedArtists.length === 0) {
+    throw new Error("Aucun artiste référencé pour ces filtres. Essaie d'autres combinaisons.");
+  }
+
+  // Mélange et limite à 20 artistes pour ne pas surcharger
+  const sample = shuffle(taggedArtists).slice(0, 20);
+
+  // Récupère leurs top tracks en parallèle
+  const trackArrays = await Promise.all(
+    sample.map(({ artist, genre }) => fetchArtistTracks(artist, genre))
   );
 
-  let allTracks = pools.flat();
+  let allTracks = trackArrays.flat();
 
-  // Déduplique
+  // Déduplique par ID
   const seen = new Set();
   allTracks = allTracks.filter(t => {
     if (seen.has(t.id)) return false;
@@ -76,18 +101,22 @@ export async function pickDeezerTracks(genres, decades, count) {
     return true;
   });
 
-  // Validation stricte des années
+  // Filtre par années si possible (la plupart des tracks Deezer ont une année)
   if (yearMin && yearMax) {
-    const strict = allTracks.filter(t => t.year && t.year >= yearMin && t.year <= yearMax);
-    if (strict.length >= Math.min(count, 5)) {
-      allTracks = strict;
+    const filtered = allTracks.filter(t => {
+      if (!t.year) return true;  // garde si année inconnue
+      return t.year >= yearMin && t.year <= yearMax;
+    });
+    if (filtered.length >= Math.min(count, 5)) {
+      allTracks = filtered;
     }
   }
 
   if (allTracks.length === 0) {
-    throw new Error("Aucun titre trouvé. Essaie d'autres filtres.");
+    throw new Error("Aucun titre disponible. Essaie d'autres filtres.");
   }
 
+  // Mélange et complète si pas assez
   let picked = shuffle(allTracks);
   while (picked.length < count) picked = [...picked, ...shuffle(allTracks)];
   picked = picked.slice(0, count);
