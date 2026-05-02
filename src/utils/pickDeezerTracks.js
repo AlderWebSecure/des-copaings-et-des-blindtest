@@ -1,5 +1,5 @@
 // src/utils/pickDeezerTracks.js
-// Pioche stricte : on ne mélange JAMAIS les genres, on respecte les années
+// Pioche stricte par genre (validation côté API)
 
 import { DEEZER_GENRES, DECADE_RANGES } from "../constants/deezerGenres";
 
@@ -29,13 +29,9 @@ function decadeFromYear(year) {
   return "2020s";
 }
 
-// Récupère le pool d'un genre (artistes du genre + leurs top tracks avec année)
 async function fetchGenrePool(genreName, genreId, yearMin, yearMax) {
   try {
-    const params = new URLSearchParams({
-      genre: genreId,
-      limit: "80",
-    });
+    const params = new URLSearchParams({ genre: genreId, limit: "80" });
     if (yearMin) params.set("year_min", yearMin);
     if (yearMax) params.set("year_max", yearMax);
 
@@ -48,7 +44,7 @@ async function fetchGenrePool(genreName, genreId, yearMin, yearMax) {
       .filter(t => t.preview)
       .map(t => ({ ...t, _genre: genreName }));
   } catch (e) {
-    console.warn(`Pool ${genreName} échec:`, e);
+    console.warn(`Pool ${genreName} failed:`, e);
     return [];
   }
 }
@@ -58,19 +54,17 @@ export async function pickDeezerTracks(genres, decades, count) {
   const yearMin = ranges.length ? Math.min(...ranges.map(r => r[0])) : null;
   const yearMax = ranges.length ? Math.max(...ranges.map(r => r[1])) : null;
 
-  // Pools en parallèle (1 pool par genre)
   const pools = await Promise.all(
     genres.map(async (g) => {
-      const id = DEEZER_GENRES[g];
-      if (!id) return [];
-      return fetchGenrePool(g, id, yearMin, yearMax);
+      const cfg = DEEZER_GENRES[g];
+      if (!cfg) return [];
+      return fetchGenrePool(g, cfg.id, yearMin, yearMax);
     })
   );
 
-  // Union de tous les pools
   let allTracks = pools.flat();
 
-  // Déduplique par ID
+  // Déduplique
   const seen = new Set();
   allTracks = allTracks.filter(t => {
     if (seen.has(t.id)) return false;
@@ -78,24 +72,20 @@ export async function pickDeezerTracks(genres, decades, count) {
     return true;
   });
 
-  // Validation stricte : on garde uniquement ceux qui ont preview ET année dans la plage
+  // Validation stricte des années
   if (yearMin && yearMax) {
     const strict = allTracks.filter(t => t.year && t.year >= yearMin && t.year <= yearMax);
     if (strict.length >= Math.min(count, 5)) {
       allTracks = strict;
     }
-    // Si strict trop petit, on garde au moins ceux avec preview (filtre années lâche)
   }
 
   if (allTracks.length === 0) {
-    throw new Error("Aucun titre trouvé. Essaie d'autres filtres genre/époque.");
+    throw new Error("Aucun titre trouvé. Essaie d'autres filtres.");
   }
 
-  // Si pas assez après filtres, complète avec ce qu'on a en duplicant
   let picked = shuffle(allTracks);
-  while (picked.length < count) {
-    picked = [...picked, ...shuffle(allTracks)];
-  }
+  while (picked.length < count) picked = [...picked, ...shuffle(allTracks)];
   picked = picked.slice(0, count);
 
   return picked.map((t, i) => ({

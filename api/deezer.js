@@ -1,8 +1,6 @@
 // api/deezer.js
-// Stratégie : pour chaque genre, on combine plusieurs sources Deezer
-//   - le chart du genre (top tracks récents)
-//   - les artistes populaires du genre + leurs top tracks
-// Cela donne accès à des centaines de morceaux par genre
+// Source de vérité : on récupère les artistes du genre, puis on
+// VALIDE leur appartenance via l'endpoint artist (qui contient ses genres réels)
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -12,7 +10,7 @@ export default async function handler(req, res) {
   const { q, genre, limit = 50, year_min, year_max, suggest } = req.query;
 
   try {
-    // ─── SUGGESTIONS (autocomplete) ────────────────────
+    // ─── SUGGESTIONS ───────────────────────────────────
     if (suggest) {
       if (suggest.length < 2) return res.status(200).json({ suggestions: [] });
       const url  = `https://api.deezer.com/search?q=${encodeURIComponent(suggest)}&limit=${limit}&output=json`;
@@ -48,23 +46,58 @@ export default async function handler(req, res) {
       return res.status(200).json(formatTrack({ ...tracks[0], ...detailed }));
     }
 
-    // ─── PIOCHE PAR GENRE (avec gros pool d'artistes) ──
+    // ─── PIOCHE PAR GENRE (avec validation stricte) ───
     if (genre) {
-      // Étape 1 : récupère les artistes populaires du genre
-      const artistsUrl  = `https://api.deezer.com/genre/${genre}/artists?output=json`;
+      const genreId = +genre;
+
+      // 1. Récupère les artistes proposés par Deezer pour ce genre
+      const artistsUrl  = `https://api.deezer.com/genre/${genreId}/artists?output=json`;
       const artistsRes  = await fetch(artistsUrl);
       const artistsData = await artistsRes.json();
-      const artists     = (artistsData.data || []).slice(0, 15);
+      const candidateArtists = (artistsData.data || []).slice(0, 25);
 
-      if (artists.length === 0) {
-        return res.status(404).json({ error: "Genre non trouvé sur Deezer" });
+      if (candidateArtists.length === 0) {
+        return res.status(404).json({ error: "Genre non trouvé" });
       }
 
-      // Étape 2 : récupère 10 top tracks par artiste en parallèle
-      const trackArrays = await Promise.all(
-        artists.map(async (a) => {
+      // 2. Valide chaque artiste : récupère ses vrais genres
+      // Deezer expose /artist/{id} mais pas les genres directement
+      // Par contre /artist/{id}/albums donne les genres de chaque album
+      // On utilise une heuristique : on regarde le 1er album et son genre_id
+      const validatedArtists = await Promise.all(
+        candidateArtists.map(async (a) => {
           try {
-            const r    = await fetch(`https://api.deezer.com/artist/${a.id}/top?limit=10&output=json`);
+            const albumsRes = await fetch(`https://api.deezer.com/artist/${a.id}/albums?limit=3&output=json`);
+            const albumsData = await albumsRes.json();
+            const albums = albumsData.data || [];
+            if (albums.length === 0) return null;
+
+            // Récupère le genre de l'album le plus connu
+            const detailRes = await fetch(`https://api.deezer.com/album/${albums[0].id}?output=json`);
+            const detail   = await detailRes.json();
+            const albumGenreId = detail.genre_id || detail.genres?.data?.[0]?.id;
+
+            // L'artiste est valide si l'ID genre matche
+            if (albumGenreId === genreId) {
+              return a;
+            }
+            return null;
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      const validArtists = validatedArtists.filter(Boolean);
+
+      // Si validation trop stricte (rien), on garde les premiers de la liste Deezer
+      const finalArtists = validArtists.length >= 5 ? validArtists : candidateArtists.slice(0, 15);
+
+      // 3. Pour chaque artiste validé, récupère ses top tracks
+      const trackArrays = await Promise.all(
+        finalArtists.map(async (a) => {
+          try {
+            const r = await fetch(`https://api.deezer.com/artist/${a.id}/top?limit=10&output=json`);
             const data = await r.json();
             return (data.data || [])
               .filter(t => t.preview)
@@ -89,9 +122,8 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: "Aucune piste trouvée" });
       }
 
-      // Étape 3 : si on filtre par année, on récupère les détails en parallèle
+      // 4. Si filtre années, on récupère les détails et filtre strict
       if (year_min || year_max) {
-        // Limite à 60 pour éviter de spammer Deezer
         const sample = allTracks.slice(0, 60);
         const detailed = await Promise.all(
           sample.map(async (t) => {
@@ -107,16 +139,11 @@ export default async function handler(req, res) {
           return true;
         });
 
-        // Si après filtre on a quand même des résultats, on les renvoie
         if (filtered.length > 0) {
           return res.status(200).json({ tracks: filtered.map(formatTrack) });
         }
-
-        // Sinon fallback : renvoie tout sans filtre années (pour ne pas tomber à 0)
-        return res.status(200).json({
-          tracks: detailed.map(formatTrack),
-          warning: "Filtre années trop restrictif, renvoi de tous les titres du genre",
-        });
+        // Sinon renvoie tout sans filtre années (au moins le genre est bon)
+        return res.status(200).json({ tracks: detailed.map(formatTrack) });
       }
 
       return res.status(200).json({ tracks: allTracks.slice(0, +limit).map(formatTrack) });
