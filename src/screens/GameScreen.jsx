@@ -120,7 +120,7 @@ export default function GameScreen({
           </div>
         </Card>
 
-        <Card className="fade-d2" style={{ marginBottom: 12 }}>
+        <Card className="fade-d2" style={{ marginBottom: 12, position: "relative", zIndex: 100, overflow: "visible" }}>
           <div style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 800, marginBottom: 8 }}>TA RÉPONSE</div>
           <div style={{ display: "flex", gap: 8 }}>
             <SearchInput
@@ -147,7 +147,7 @@ export default function GameScreen({
           )}
         </Card>
 
-        <Card className="fade-d3">
+        <Card className="fade-d3" style={{ position: "relative", zIndex: 1 }}>
           <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 800, marginBottom: 10 }}>
             STATUT · {answeredCount}/{players.length} ont répondu
           </div>
