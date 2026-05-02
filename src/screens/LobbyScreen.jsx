@@ -8,6 +8,13 @@ import GhostBtn   from "../components/GhostBtn";
 export default function LobbyScreen({ roomCode, config, players, source, isHost, onStart, onLeave }) {
   const [copied, setCopied] = useState(false);
 
+  // Sécurise l'accès aux propriétés
+  const safeGenres   = config?.genres   || [];
+  const safeDecades  = config?.decades  || [];
+  const safeArtists  = config?.artists  || [];
+  const safeRounds   = config?.rounds   || 10;
+  const safeTimerSec = config?.timerSec || 25;
+
   const copy = () => {
     navigator.clipboard?.writeText(roomCode);
     setCopied(true);
@@ -22,31 +29,31 @@ export default function LobbyScreen({ roomCode, config, players, source, isHost,
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#1a1a2e", padding: "32px 20px", fontFamily: "'Nunito', sans-serif" }}>
+    <div style={{ minHeight: "100vh", padding: "32px 20px", fontFamily: "'Nunito', sans-serif" }}>
       <div style={{ maxWidth: 480, margin: "0 auto" }}>
 
         <Card className="fade" style={{
           textAlign: "center", marginBottom: 14, padding: "28px 20px",
-          background: "linear-gradient(135deg, #16213e, #0f3460)",
+          background: "linear-gradient(135deg, var(--card), var(--card-2))",
         }}>
-          <div style={{ fontSize: 11, color: "#ffffff55", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10 }}>
             Code de la room
           </div>
           <div style={{
-            fontSize: 42, fontWeight: 900, color: "#ffd93d",
+            fontSize: 42, fontWeight: 900, color: "var(--secondary)",
             letterSpacing: "0.15em", marginBottom: 12,
           }}>{roomCode}</div>
           <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
             <button onClick={copy} style={{
               padding: "8px 18px", borderRadius: 50, fontSize: 13, fontWeight: 700,
               cursor: "pointer", fontFamily: "'Nunito', sans-serif", border: "none",
-              background: copied ? "#6bcb77" : "#0f3460",
-              color: copied ? "#1a1a2e" : "#ffffffaa",
+              background: copied ? "var(--success)" : "var(--card-2)",
+              color: copied ? "var(--bg)" : "var(--text-2)",
             }}>{copied ? "✓ Copié !" : "📋 Copier code"}</button>
             <button onClick={shareLink} style={{
               padding: "8px 18px", borderRadius: 50, fontSize: 13, fontWeight: 700,
               cursor: "pointer", fontFamily: "'Nunito', sans-serif", border: "none",
-              background: "#0f3460", color: "#ffffffaa",
+              background: "var(--card-2)", color: "var(--text-2)",
             }}>🔗 Partager lien</button>
           </div>
         </Card>
@@ -61,10 +68,10 @@ export default function LobbyScreen({ roomCode, config, players, source, isHost,
               {source === "spotify" ? "♫" : "🎵"}
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 11, color: "#ffffff55", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+              <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" }}>
                 Source
               </div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: "#fff" }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>
                 {source === "spotify" ? "Spotify Premium" : "Deezer · extraits 30s"}
               </div>
             </div>
@@ -72,36 +79,40 @@ export default function LobbyScreen({ roomCode, config, players, source, isHost,
         </Card>
 
         <Card className="fade-d2" style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, color: "#ffffff55", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10 }}>
             Configuration
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {config.genres.slice(0, 4).map(g => <Badge key={g} label={g} color="#e94560" />)}
-            {config.genres.length > 4 && <Badge label={`+${config.genres.length - 4}`} color="#e94560" />}
-            {config.decades.map(d => <Badge key={d} label={d} color="#ffd93d" />)}
-            <Badge label={`${config.rounds} titres`} color="#6bcb77" />
-            <Badge label={`${config.timerSec}s`} color="#4d96ff" />
+            {safeGenres.slice(0, 4).map(g => <Badge key={g} label={g} color="var(--primary)" />)}
+            {safeGenres.length > 4 && <Badge label={`+${safeGenres.length - 4}`} color="var(--primary)" />}
+
+            {safeArtists.slice(0, 4).map(a => <Badge key={a.id || a.name} label={`🎤 ${a.name}`} color="var(--info)" />)}
+            {safeArtists.length > 4 && <Badge label={`+${safeArtists.length - 4} artistes`} color="var(--info)" />}
+
+            {safeDecades.map(d => <Badge key={d} label={d} color="var(--secondary)" />)}
+            <Badge label={`${safeRounds} titres`} color="var(--success)" />
+            <Badge label={`${safeTimerSec}s`} color="var(--info)" />
           </div>
         </Card>
 
         <Card className="fade-d2" style={{ marginBottom: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: "#ffffff55", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+            <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" }}>
               Joueurs · {players.length}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#6bcb77", animation: "pulse 1.5s ease infinite" }} />
-              <span style={{ fontSize: 12, color: "#ffffff55", fontWeight: 700 }}>en direct</span>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)", animation: "pulse 1.5s ease infinite" }} />
+              <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 700 }}>en direct</span>
             </div>
           </div>
           {players.map(p => <PlayerRow key={p.id} player={p} showScore={false} />)}
           <div style={{
             display: "flex", alignItems: "center", gap: 12, padding: "10px 0",
-            color: "#ffffff55", fontSize: 13, fontWeight: 600,
+            color: "var(--text-3)", fontSize: 13, fontWeight: 600,
           }}>
             <div style={{
               width: 38, height: 38, borderRadius: "50%",
-              border: "2px dashed #ffffff22",
+              border: "2px dashed var(--border)",
               display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
             }}>+</div>
             En attente d'autres joueurs…
@@ -117,8 +128,8 @@ export default function LobbyScreen({ roomCode, config, players, source, isHost,
           ) : (
             <div style={{
               flex: 2, padding: "14px", fontSize: 14, fontWeight: 700,
-              background: "#16213e", borderRadius: 14, color: "#ffffff77",
-              textAlign: "center", border: "2px solid #ffffff15",
+              background: "var(--card)", borderRadius: 14, color: "var(--text-2)",
+              textAlign: "center", border: "2px solid var(--border)",
             }}>
               ⏳ En attente du host…
             </div>
