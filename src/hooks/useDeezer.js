@@ -1,75 +1,101 @@
 // src/hooks/useDeezer.js
-// Gère la recherche + lecture des extraits Deezer (30s)
-// Utilise notre proxy /api/deezer pour éviter le CORS
+// Joue un extrait Deezer 30s — gère proprement les race conditions play/pause
 
 import { useRef, useState, useCallback } from "react";
 
 export function useDeezer() {
-  const audioRef  = useRef(null);
-  const [playing, setPlaying]   = useState(false);
-  const [loading, setLoading]   = useState(false);
-  const [error,   setError]     = useState(null);
-  const [track,   setTrack]     = useState(null); // { title, artist, preview, cover }
+  const audioRef    = useRef(null);
+  const playPromise = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState(null);
+  const [track,   setTrack]   = useState(null);
 
-  // Cherche une piste via notre proxy et lance la lecture
-  const play = useCallback(async (query) => {
-    setLoading(true);
-    setError(null);
+  // Stop propre — attend que le play() en cours finisse avant de pause()
+  const safeStop = async () => {
+    if (audioRef.current) {
+      try {
+        if (playPromise.current) {
+          await playPromise.current.catch(() => {});
+        }
+        audioRef.current.pause();
+        audioRef.current.src = "";
+        audioRef.current.load();
+      } catch {}
+      audioRef.current = null;
+      playPromise.current = null;
+    }
+  };
+
+  const playTrack = useCallback(async (trackData) => {
+    setLoading(true); setError(null);
 
     try {
-      const res  = await fetch(`/api/deezer?q=${encodeURIComponent(query)}&limit=5`);
-      const data = await res.json();
+      if (!trackData?.preview) throw new Error("Pas d'extrait disponible pour cette piste");
 
-      if (data.error) throw new Error(data.error);
+      await safeStop();
 
-      // Stop l'audio précédent
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-
-      const audio = new Audio(data.preview);
+      const audio = new Audio(trackData.preview);
       audio.volume = 0.8;
       audioRef.current = audio;
-      setTrack(data);
+      setTrack(trackData);
 
-      audio.onended  = () => setPlaying(false);
-      audio.onerror  = () => { setError("Erreur de lecture audio"); setPlaying(false); };
-      audio.onpause  = () => setPlaying(false);
-      audio.onplay   = () => setPlaying(true);
+      audio.onended = () => setPlaying(false);
+      audio.onerror = () => { setError("Erreur de lecture"); setPlaying(false); };
+      audio.onpause = () => setPlaying(false);
+      audio.onplay  = () => setPlaying(true);
 
-      await audio.play();
+      // Garde la promesse pour l'attendre avant un futur pause/stop
+      playPromise.current = audio.play();
+      await playPromise.current;
+      playPromise.current = null;
       setPlaying(true);
-
     } catch (err) {
+      // AbortError = on a stop avant que play termine, ignore-le
+      if (err.name === "AbortError") return;
       setError(err.message || "Erreur Deezer");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const pause = useCallback(() => {
-    audioRef.current?.pause();
+  const play = useCallback(async (query) => {
+    setLoading(true); setError(null);
+    try {
+      const r = await fetch(`/api/deezer?q=${encodeURIComponent(query)}`);
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      await playTrack(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [playTrack]);
+
+  const pause = useCallback(async () => {
+    if (!audioRef.current) return;
+    if (playPromise.current) {
+      await playPromise.current.catch(() => {});
+    }
+    audioRef.current.pause();
   }, []);
 
   const resume = useCallback(() => {
-    audioRef.current?.play();
+    if (!audioRef.current) return;
+    playPromise.current = audioRef.current.play();
+    playPromise.current.catch(() => {});
   }, []);
 
-  const stop = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      audioRef.current = null;
-    }
+  const stop = useCallback(async () => {
+    await safeStop();
     setPlaying(false);
     setTrack(null);
   }, []);
 
-  // Retourne le volume courant (0-1)
   const setVolume = useCallback((v) => {
     if (audioRef.current) audioRef.current.volume = Math.max(0, Math.min(1, v));
   }, []);
 
-  return { play, pause, resume, stop, setVolume, playing, loading, error, track };
+  return { play, playTrack, pause, resume, stop, setVolume, playing, loading, error, track };
 }
