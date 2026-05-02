@@ -1,14 +1,12 @@
 // src/components/ArtistPicker.jsx
-// Cherche des artistes Deezer + permet d'en sélectionner plusieurs
-
 import { useState, useEffect, useRef } from "react";
 
 export default function ArtistPicker({ selected = [], onChange }) {
-  const [query, setQuery]             = useState("");
-  const [results, setResults]         = useState([]);
-  const [loading, setLoading]         = useState(false);
-  const [open, setOpen]               = useState(false);
-  const wrapperRef = useRef(null);
+  const [query, setQuery]     = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen]       = useState(false);
+  const wrapperRef  = useRef(null);
   const debounceRef = useRef(null);
 
   useEffect(() => {
@@ -57,7 +55,6 @@ export default function ArtistPicker({ selected = [], onChange }) {
 
   return (
     <div ref={wrapperRef} style={{ position: "relative" }}>
-      {/* Sélectionnés */}
       {selected.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
           {selected.map(a => (
@@ -85,7 +82,6 @@ export default function ArtistPicker({ selected = [], onChange }) {
         </div>
       )}
 
-      {/* Search input */}
       <input
         value={query}
         onChange={e => setQuery(e.target.value)}
@@ -96,7 +92,7 @@ export default function ArtistPicker({ selected = [], onChange }) {
 
       {loading && (
         <div style={{
-          position: "absolute", right: 14, top: 14,
+          position: "absolute", right: 14, top: selected.length > 0 ? "auto" : 14, bottom: selected.length > 0 ? 14 : "auto",
           width: 14, height: 14, borderRadius: "50%",
           border: "2px solid var(--border)",
           borderTopColor: "var(--primary)",
@@ -104,7 +100,6 @@ export default function ArtistPicker({ selected = [], onChange }) {
         }} />
       )}
 
-      {/* Dropdown */}
       {open && results.length > 0 && (
         <div style={{
           position: "absolute", top: "100%", left: 0, right: 0,

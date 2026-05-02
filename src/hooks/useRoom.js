@@ -1,6 +1,4 @@
 // src/hooks/useRoom.js
-// Sync temps réel d'une room Firebase + pioche dynamique Deezer
-
 import { useState, useEffect, useCallback } from "react";
 import {
   ref, set, get, update, remove, onValue, onDisconnect,
@@ -16,7 +14,6 @@ export function useRoom() {
   const [error,   setError]   = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // ── ÉCOUTE TEMPS RÉEL ──────────────────────────────
   useEffect(() => {
     if (!code) return;
     const roomRef = ref(db, `rooms/${code}`);
@@ -28,11 +25,9 @@ export function useRoom() {
     return () => unsub();
   }, [code]);
 
-  // ── CRÉER UNE ROOM (host) ──────────────────────────
   const createRoom = useCallback(async (config, hostPlayer, source) => {
     setLoading(true); setError(null);
     try {
-      // Génère un code unique
       let newCode, exists = true, attempts = 0;
       while (exists && attempts < 10) {
         newCode = generateRoomCode();
@@ -42,8 +37,12 @@ export function useRoom() {
       }
       if (exists) throw new Error("Impossible de générer un code unique");
 
-      // Pioche les titres dynamiquement depuis Deezer
-      const tracks = await pickDeezerTracks(config.genres, config.decades, config.rounds);
+      const tracks = await pickDeezerTracks(
+        config.genres,
+        config.decades,
+        config.rounds,
+        config.artists || []
+      );
       if (!tracks || tracks.length === 0) {
         throw new Error("Aucun titre trouvé pour ces filtres. Essaie d'autres genres/époques.");
       }
@@ -70,8 +69,6 @@ export function useRoom() {
       };
 
       await set(ref(db, `rooms/${newCode}`), roomData);
-
-      // Auto-leave si déconnexion
       onDisconnect(ref(db, `rooms/${newCode}/players/${hostPlayer.id}`)).remove();
 
       setCode(newCode);
@@ -84,7 +81,6 @@ export function useRoom() {
     }
   }, []);
 
-  // ── REJOINDRE UNE ROOM ─────────────────────────────
   const joinRoom = useCallback(async (roomCode, player) => {
     setLoading(true); setError(null);
     try {
@@ -94,13 +90,11 @@ export function useRoom() {
       const data = snap.val();
       if (data.meta.status === "finished") throw new Error("Cette partie est terminée");
 
-      // Vérifie que le pseudo est unique
       const existingNames = Object.values(data.players || {}).map(p => p.name.toLowerCase());
       if (existingNames.includes(player.name.toLowerCase())) {
         throw new Error("Ce pseudo est déjà pris dans la room");
       }
 
-      // Couleur unique
       const existingColors = Object.values(data.players || {}).map(p => p.color);
       const color = generatePlayerColor(existingColors);
 
@@ -125,7 +119,6 @@ export function useRoom() {
     }
   }, []);
 
-  // ── QUITTER LA ROOM ────────────────────────────────
   const leaveRoom = useCallback(async (playerId) => {
     if (!code) return;
     try {
@@ -139,7 +132,6 @@ export function useRoom() {
     setRoom(null);
   }, [code]);
 
-  // ── HOST : LANCER LA PARTIE ────────────────────────
   const startGame = useCallback(async () => {
     if (!code) return;
     await update(ref(db, `rooms/${code}/meta`), { status: "playing" });
@@ -150,7 +142,6 @@ export function useRoom() {
     });
   }, [code]);
 
-  // ── HOST : MANCHE SUIVANTE ─────────────────────────
   const nextRound = useCallback(async (currentIdx, totalRounds) => {
     if (!code) return;
     const next = currentIdx + 1;
@@ -166,14 +157,12 @@ export function useRoom() {
     }
   }, [code]);
 
-  // ── HOST : RÉVÉLER LA RÉPONSE ──────────────────────
   const revealRound = useCallback(async () => {
     if (!code) return;
     await update(ref(db, `rooms/${code}/meta`), { status: "reveal" });
     await update(ref(db, `rooms/${code}/current`), { revealAt: Date.now() });
   }, [code]);
 
-  // ── JOUEUR : SOUMETTRE UNE RÉPONSE ─────────────────
   const submitAnswer = useCallback(async (playerId, answer, timeLeft, totalTime) => {
     if (!code || !room) return 0;
     const idx   = room.current.roundIndex;
@@ -188,7 +177,6 @@ export function useRoom() {
       submittedAt: Date.now(),
     });
 
-    // Met à jour le score cumulé
     const playerRef = ref(db, `rooms/${code}/players/${playerId}/score`);
     const snap      = await get(playerRef);
     await set(playerRef, (snap.val() || 0) + total);
@@ -196,7 +184,6 @@ export function useRoom() {
     return total;
   }, [code, room]);
 
-  // ── HOST : RESET POUR REJOUER ──────────────────────
   const restartGame = useCallback(async () => {
     if (!code || !room) return;
     setLoading(true); setError(null);
@@ -204,7 +191,8 @@ export function useRoom() {
       const newTracks = await pickDeezerTracks(
         room.config.genres,
         room.config.decades,
-        room.config.rounds
+        room.config.rounds,
+        room.config.artists || []
       );
       if (!newTracks || newTracks.length === 0) {
         throw new Error("Aucun titre trouvé. Change les filtres.");

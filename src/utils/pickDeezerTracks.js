@@ -1,7 +1,5 @@
 // src/utils/pickDeezerTracks.js
-// Pour chaque artiste de la whitelist :
-//   - on demande à Deezer ses tracks SORTIES dans la plage d'années demandée
-//   - donc AC/DC + 70s → uniquement albums Highway to Hell, Back in Black etc.
+// Pour chaque artiste sélectionné, récupère ses tracks DANS la plage d'années
 
 import { ARTISTS_DB } from "../constants/artistsDB";
 import { DECADE_RANGES } from "../constants/deezerGenres";
@@ -10,6 +8,9 @@ const GENRE_EMOJI = {
   "Pop": "🎵", "Hip-Hop": "🎤", "Rock": "🎸", "R&B": "🎵",
   "Électro": "🎹", "Jazz": "🎷", "Classique": "🎼", "Reggaeton": "🥁",
   "K-Pop": "💜", "Metal": "🤘", "Soul": "🎙️", "Variété FR": "🇫🇷",
+  "Country": "🤠", "Funk": "🕺", "Disco": "🪩", "Latino": "💃",
+  "Punk": "💢", "Indie": "🌿", "Reggae": "🌴", "Blues": "🎺",
+  "Custom": "⭐",
 };
 
 function shuffle(arr) {
@@ -32,11 +33,9 @@ function decadeFromYear(year) {
   return "2020s";
 }
 
-// Construit la liste d'artistes à interroger selon les filtres
 function selectArtists(genres, decades) {
   const set = new Set();
   const tagged = [];
-
   for (const genre of genres) {
     const genreDB = ARTISTS_DB[genre];
     if (!genreDB) continue;
@@ -54,7 +53,6 @@ function selectArtists(genres, decades) {
   return tagged;
 }
 
-// Récupère les tracks d'un artiste DANS la plage d'années
 async function fetchArtistTracksInRange(artistName, genreName, yearMin, yearMax) {
   try {
     const params = new URLSearchParams({
@@ -78,15 +76,13 @@ async function fetchArtistTracksInRange(artistName, genreName, yearMin, yearMax)
 }
 
 export async function pickDeezerTracks(genres, decades, count, customArtists = []) {
-  // Calcule la plage d'années couvrant les décennies sélectionnées
   const ranges  = decades.map(d => DECADE_RANGES[d]).filter(Boolean);
   const yearMin = ranges.length ? Math.min(...ranges.map(r => r[0])) : null;
   const yearMax = ranges.length ? Math.max(...ranges.map(r => r[1])) : null;
 
-  // Combine artistes de la whitelist + artistes custom
+  // Combine artistes whitelist + customs
   const taggedArtists = selectArtists(genres, decades);
 
-  // Ajoute les artistes choisis manuellement (genre = "Custom")
   for (const a of customArtists) {
     if (!taggedArtists.find(t => t.artist.toLowerCase() === a.name.toLowerCase())) {
       taggedArtists.push({ artist: a.name, genre: "Custom" });
@@ -97,10 +93,8 @@ export async function pickDeezerTracks(genres, decades, count, customArtists = [
     throw new Error("Aucun artiste sélectionné. Choisis des genres ou des artistes spécifiques.");
   }
 
-  // Mélange et limite à 25 artistes pour ne pas surcharger
   const sample = shuffle(taggedArtists).slice(0, 25);
 
-  // Récupère leurs tracks DANS la plage d'années en parallèle
   const trackArrays = await Promise.all(
     sample.map(({ artist, genre }) =>
       fetchArtistTracksInRange(artist, genre, yearMin, yearMax)
@@ -122,7 +116,6 @@ export async function pickDeezerTracks(genres, decades, count, customArtists = [
     throw new Error("Aucun titre trouvé dans cette période. Essaie d'autres décennies ou genres.");
   }
 
-  // Mélange et complète si pas assez
   let picked = shuffle(allTracks);
   while (picked.length < count) picked = [...picked, ...shuffle(allTracks)];
   picked = picked.slice(0, count);

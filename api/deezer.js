@@ -1,8 +1,9 @@
 // api/deezer.js
 // Modes :
-//   - ?suggest=mich         → autocomplétion
-//   - ?q=eminem             → 1 piste (recherche libre)
-//   - ?artist=AC/DC&year_min=1970&year_max=1979 → tracks de l'artiste DANS la plage d'années
+//   - ?suggest=mich                                          → autocomplétion tracks
+//   - ?artist_search=vald                                    → autocomplétion artistes
+//   - ?q=eminem                                              → 1 piste (recherche libre)
+//   - ?artist=AC/DC&year_min=1970&year_max=1979              → tracks d'un artiste DANS la plage
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -12,7 +13,7 @@ export default async function handler(req, res) {
   const { q, artist, artist_search, year_min, year_max, limit = 8, suggest } = req.query;
 
   try {
-    // ─── RECHERCHE D'ARTISTES (autocomplétion) ─────────
+    // ─── RECHERCHE D'ARTISTES ──────────────────────────
     if (artist_search) {
       if (artist_search.length < 2) return res.status(200).json({ artists: [] });
       const url  = `https://api.deezer.com/search/artist?q=${encodeURIComponent(artist_search)}&limit=8&output=json`;
@@ -27,7 +28,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ artists });
     }
 
-    // ─── SUGGESTIONS (autocomplete tracks) ─────────────
+    // ─── SUGGESTIONS TRACKS ────────────────────────────
     if (suggest) {
       if (suggest.length < 2) return res.status(200).json({ suggestions: [] });
       const url  = `https://api.deezer.com/search?q=${encodeURIComponent(suggest)}&limit=${limit}&output=json`;
@@ -63,16 +64,15 @@ export default async function handler(req, res) {
       return res.status(200).json(formatTrack({ ...tracks[0], ...detailed }));
     }
 
-    // ─── ARTISTE + DÉCENNIE ───────────────────────────
+    // ─── ARTISTE (+ DÉCENNIE optionnelle) ──────────────
     if (artist) {
-      // 1. Trouve l'artiste exact par nom
       const searchUrl  = `https://api.deezer.com/search/artist?q=${encodeURIComponent(artist)}&limit=1&output=json`;
       const searchRes  = await fetch(searchUrl);
       const searchData = await searchRes.json();
       const found      = searchData.data?.[0];
       if (!found) return res.status(404).json({ error: `Artiste "${artist}" non trouvé` });
 
-      // Sans filtre années → fallback top tracks classique
+      // Sans filtre années → top tracks classiques
       if (!year_min && !year_max) {
         const topRes  = await fetch(`https://api.deezer.com/artist/${found.id}/top?limit=${limit}&output=json`);
         const topData = await topRes.json();
@@ -82,12 +82,11 @@ export default async function handler(req, res) {
         return res.status(200).json({ tracks: tracks.map(formatTrack) });
       }
 
-      // Avec filtre années → on récupère TOUS les albums de l'artiste
+      // Avec filtre années → albums dans la plage
       const albumsRes  = await fetch(`https://api.deezer.com/artist/${found.id}/albums?limit=100&output=json`);
       const albumsData = await albumsRes.json();
       const allAlbums  = albumsData.data || [];
 
-      // Filtre les albums dont release_date est dans la plage demandée
       const albumsInRange = allAlbums.filter(alb => {
         if (!alb.release_date) return false;
         const y = parseInt(alb.release_date.slice(0, 4));
@@ -100,7 +99,6 @@ export default async function handler(req, res) {
         return res.status(200).json({ tracks: [] });
       }
 
-      // Récupère les tracks de chaque album (en parallèle, max 8 albums)
       const sampleAlbums = albumsInRange.slice(0, 8);
       const trackArrays  = await Promise.all(
         sampleAlbums.map(async (alb) => {
@@ -124,7 +122,7 @@ export default async function handler(req, res) {
 
       let tracks = trackArrays.flat();
 
-      // Déduplique par titre (un même morceau peut être sur plusieurs albums)
+      // Déduplique par titre
       const seen = new Set();
       tracks = tracks.filter(t => {
         const key = t.title.toLowerCase().trim();
@@ -133,7 +131,6 @@ export default async function handler(req, res) {
         return true;
       });
 
-      // Limite et retourne
       tracks = tracks.slice(0, +limit);
       return res.status(200).json({
         tracks: tracks.map(t => ({
@@ -148,7 +145,7 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.status(400).json({ error: "Paramètre q, artist ou suggest requis" });
+    return res.status(400).json({ error: "Paramètre q, artist, artist_search ou suggest requis" });
 
   } catch (err) {
     console.error("Deezer proxy error:", err);
