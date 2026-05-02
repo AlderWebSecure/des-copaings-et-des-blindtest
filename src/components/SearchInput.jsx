@@ -81,7 +81,7 @@ export default function SearchInput({ value, onChange, onSubmit, disabled, place
   };
 
   return (
-    <div ref={wrapperRef} style={{ position: "relative", flex: 1 }}>
+    <div ref={wrapperRef} style={{ position: "relative", flex: 1, zIndex: open ? 100 : 1 }}>
       <input
         ref={inputRef}
         value={value}
@@ -118,11 +118,12 @@ export default function SearchInput({ value, onChange, onSubmit, disabled, place
           position: "absolute", top: "100%", left: 0, right: 0,
           marginTop: 6,
           background: "var(--card)",
-          border: "2px solid var(--border)",
+          border: "2px solid var(--primary)",
           borderRadius: 12,
           maxHeight: 280, overflowY: "auto",
-          zIndex: 50,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+          zIndex: 1000,
+          boxShadow: "0 12px 40px rgba(0,0,0,0.6)",
+          backdropFilter: "blur(8px)",
         }}>
           {suggestions.map((s, i) => (
             <div
