@@ -1,5 +1,5 @@
 // src/hooks/useDeezer.js
-// Joue un extrait Deezer 30s — gère proprement les race conditions play/pause
+// Lecture extraits Deezer 30s avec gestion robuste des erreurs
 
 import { useRef, useState, useCallback } from "react";
 
@@ -11,7 +11,6 @@ export function useDeezer() {
   const [error,   setError]   = useState(null);
   const [track,   setTrack]   = useState(null);
 
-  // Stop propre — attend que le play() en cours finisse avant de pause()
   const safeStop = async () => {
     if (audioRef.current) {
       try {
@@ -27,38 +26,79 @@ export function useDeezer() {
     }
   };
 
+  // Joue une URL audio en gérant les erreurs
+  const playUrl = async (url, trackData) => {
+    await safeStop();
+
+    return new Promise((resolve, reject) => {
+      const audio = new Audio();
+      audio.crossOrigin = "anonymous";  // important pour Deezer
+      audio.volume = 0.8;
+      audio.preload = "auto";
+
+      const cleanup = () => {
+        audio.onerror = null;
+        audio.oncanplay = null;
+      };
+
+      audio.onerror = (e) => {
+        cleanup();
+        reject(new Error("Audio error: " + (audio.error?.message || "unknown")));
+      };
+
+      audio.oncanplay = async () => {
+        cleanup();
+        audioRef.current = audio;
+        setTrack(trackData);
+
+        audio.onended = () => setPlaying(false);
+        audio.onpause = () => setPlaying(false);
+        audio.onplay  = () => setPlaying(true);
+
+        try {
+          playPromise.current = audio.play();
+          await playPromise.current;
+          playPromise.current = null;
+          setPlaying(true);
+          resolve();
+        } catch (err) {
+          if (err.name === "AbortError") return resolve();
+          reject(err);
+        }
+      };
+
+      audio.src = url;
+      audio.load();
+    });
+  };
+
+  // Joue une track depuis ses données pré-chargées
   const playTrack = useCallback(async (trackData) => {
     setLoading(true); setError(null);
-
     try {
-      if (!trackData?.preview) throw new Error("Pas d'extrait disponible pour cette piste");
+      if (!trackData?.preview) throw new Error("Pas d'extrait disponible");
 
-      await safeStop();
-
-      const audio = new Audio(trackData.preview);
-      audio.volume = 0.8;
-      audioRef.current = audio;
-      setTrack(trackData);
-
-      audio.onended = () => setPlaying(false);
-      audio.onerror = () => { setError("Erreur de lecture"); setPlaying(false); };
-      audio.onpause = () => setPlaying(false);
-      audio.onplay  = () => setPlaying(true);
-
-      // Garde la promesse pour l'attendre avant un futur pause/stop
-      playPromise.current = audio.play();
-      await playPromise.current;
-      playPromise.current = null;
-      setPlaying(true);
+      try {
+        await playUrl(trackData.preview, trackData);
+      } catch (err) {
+        // Fallback : retente une recherche fraîche si l'URL preview a expiré
+        console.warn("Preview URL failed, retrying search:", err);
+        const r = await fetch(`/api/deezer?q=${encodeURIComponent(trackData.artist + " " + trackData.title)}`);
+        const fresh = await r.json();
+        if (fresh.error || !fresh.preview) throw new Error("Extrait indisponible");
+        await playUrl(fresh.preview, { ...trackData, preview: fresh.preview });
+      }
     } catch (err) {
-      // AbortError = on a stop avant que play termine, ignore-le
-      if (err.name === "AbortError") return;
-      setError(err.message || "Erreur Deezer");
+      if (err.name !== "AbortError") {
+        setError(err.message || "Erreur Deezer");
+        console.error("Deezer playback error:", err);
+      }
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Recherche libre + lecture
   const play = useCallback(async (query) => {
     setLoading(true); setError(null);
     try {
@@ -67,7 +107,7 @@ export function useDeezer() {
       if (data.error) throw new Error(data.error);
       await playTrack(data);
     } catch (err) {
-      setError(err.message);
+      if (err.name !== "AbortError") setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -75,9 +115,7 @@ export function useDeezer() {
 
   const pause = useCallback(async () => {
     if (!audioRef.current) return;
-    if (playPromise.current) {
-      await playPromise.current.catch(() => {});
-    }
+    if (playPromise.current) await playPromise.current.catch(() => {});
     audioRef.current.pause();
   }, []);
 

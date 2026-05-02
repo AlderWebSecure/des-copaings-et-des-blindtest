@@ -91,6 +91,9 @@ export default function GameScreen({
           {music?.error && isHost && (
             <div style={{ color: "#ff6b6b", fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
               ⚠ {music.error}
+              <div style={{ fontSize: 11, color: "var(--text-2)", marginTop: 4, fontWeight: 600 }}>
+                Clique sur ▶ Lecture pour démarrer manuellement
+              </div>
             </div>
           )}
 
@@ -99,7 +102,15 @@ export default function GameScreen({
           </div>
 
           {isHost && (
-            <button onClick={() => music?.playing ? music?.pause() : music?.resume()} style={{
+            <button onClick={() => {
+              if (music?.playing) {
+                music?.pause();
+              } else if (round?.preview) {
+                music?.playTrack(round);
+              } else {
+                music?.resume();
+              }
+            }} style={{
               padding: "10px 24px", borderRadius: 50, fontSize: 14, fontWeight: 800,
               background: "var(--border)", color: "var(--text-2)", border: "none", cursor: "pointer",
               fontFamily: "'Nunito', sans-serif",
