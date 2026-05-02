@@ -75,15 +75,16 @@ async function fetchArtistTracksInRange(artistName, genreName, yearMin, yearMax)
   }
 }
 
-export async function pickDeezerTracks(genres, decades, count, customArtists = []) {
-  const ranges  = decades.map(d => DECADE_RANGES[d]).filter(Boolean);
+export async function pickDeezerTracks(genres = [], decades = [], count = 10, customArtists = []) {
+  const safeDecades = decades || [];
+  const ranges  = safeDecades.map(d => DECADE_RANGES[d]).filter(Boolean);
   const yearMin = ranges.length ? Math.min(...ranges.map(r => r[0])) : null;
   const yearMax = ranges.length ? Math.max(...ranges.map(r => r[1])) : null;
 
   // Combine artistes whitelist + customs
-  const taggedArtists = selectArtists(genres, decades);
+  const taggedArtists = selectArtists(genres || [], safeDecades);
 
-  for (const a of customArtists) {
+  for (const a of (customArtists || [])) {
     if (!taggedArtists.find(t => t.artist.toLowerCase() === a.name.toLowerCase())) {
       taggedArtists.push({ artist: a.name, genre: "Custom" });
     }
